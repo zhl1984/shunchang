@@ -1,0 +1,41 @@
+/* Indexed tag palettes for status and state labels. */
+.dm-tag-1,
+.dm-tag-2,
+.dm-tag-3,
+.dm-tag-4,
+.dm-tag-5,
+.dm-tag-6 {
+  border-style: solid;
+  border-width: 1px;
+}
+
+.dm-tag-1 {
+  background: var(--dm-tag-bg-1);
+  border-color: var(--dm-tag-border-1);
+  color: var(--dm-tag-text-1);
+}
+.dm-tag-2 {
+  background: var(--dm-tag-bg-2);
+  border-color: var(--dm-tag-border-2);
+  color: var(--dm-tag-text-2);
+}
+.dm-tag-3 {
+  background: var(--dm-tag-bg-3);
+  border-color: var(--dm-tag-border-3);
+  color: var(--dm-tag-text-3);
+}
+.dm-tag-4 {
+  background: var(--dm-tag-bg-4);
+  border-color: var(--dm-tag-border-4);
+  color: var(--dm-tag-text-4);
+}
+.dm-tag-5 {
+  background: var(--dm-tag-bg-5);
+  border-color: var(--dm-tag-border-5);
+  color: var(--dm-tag-text-5);
+}
+.dm-tag-6 {
+  background: var(--dm-tag-bg-6);
+  border-color: var(--dm-tag-border-6);
+  color: var(--dm-tag-text-6);
+}

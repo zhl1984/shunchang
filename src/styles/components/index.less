@@ -1,0 +1,12 @@
+// 抽离的公共模块样式可以放在这个文件夹下面
+// 比如通用卡片card.less文件，然后在index.less中引入
+// 尽量不要使用!important
+
+// 这里和/src/components并不冲突，这里只维护对应模块的通用样式，不需要抽离其他的内容
+// 如果是需要新的组件来实现，直接放在 /src/components 即可
+
+@import "./font.css";
+@import "./display.less";
+@import "./spacing.less";
+@import "./card.css";
+@import "./tag.css";

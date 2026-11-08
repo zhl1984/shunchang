@@ -1,0 +1,751 @@
+# =============================================================================
+# GitLab CI — autolabeling/fe-management（三环境统一配置）
+#
+# 注意：绿流水线 ≠ 已上生产；生产 deploy-prod-* 默认 manual（AUTO_DEPLOY_PROD=false）。
+# 本文件必须在 dev, test, main 分支保持完全一致。
+# 环境只由 CI_COMMIT_BRANCH 选择，禁止把某个分支的完整 CI 文件覆盖到另一个分支。
+#
+# 分支与发布目标：
+#   dev  -> dev-<SHA>  -> 34 开发环境（AUTO_DEPLOY_DEV=true 时自动部署）
+#   test -> test-<SHA> -> 35 测试机（AUTO_DEPLOY_TEST=true 时自动部署，否则 manual）
+#   main -> prod-<SHA> -> 生产环境（人工确认部署）
+#
+# MR 只做校验，分支流水线负责构建镜像；部署统一调用 deploy-service.sh。
+# =============================================================================
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - if: '$CI_COMMIT_BRANCH =~ /^(dev|test|master|main)$/'
+    # web/API 手动触发永远放行（候选部署 Run pipeline 依赖它；用户显式操作视为明确意图）。
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|api)$/'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    # feature/release/hotfix 的 push 不建流水线（省资源，MR 合并时校验照跑）。
+    - if: '$CI_COMMIT_BRANCH =~ /^(feature|release|hotfix)\//'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
+# cicd-harden-20260911
+stages:
+  - test
+  - build
+  - tag
+  - deploy
+
+# MR 校验：所有目标环境共用同一套检查
+mr-protect-gitlab-ci:
+  # 新 push 自动取消仍在跑的旧流水线，避免排队叠跑
+  interruptible: true
+  stage: test
+  tags:
+    - build
+  script:
+    - |
+      set -eu
+      fail() { echo "ERROR: $*"; exit 1; }
+      TARGET="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}"
+      SOURCE="${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-}"
+      test -n "$TARGET" || fail "缺少 CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      command -v git >/dev/null || fail "当前 Runner 没有 git（Shell 执行器不能使用 apk / 不要依赖 alpine image）"
+      git fetch --depth=200 origin "$TARGET"
+      if git diff --quiet "origin/${TARGET}" -- .gitlab-ci.yml; then
+        echo "mr-protect-gitlab-ci OK: .gitlab-ci.yml matches origin/${TARGET}"
+        exit 0
+      fi
+      echo "======= .gitlab-ci.yml 保护 ======="
+      echo "合入 ${TARGET} 时禁止用源分支覆盖目标分支的 .gitlab-ci.yml。"
+      synced=0
+      if [ -n "${MR_CI_SYNC_TOKEN:-}" ] && [ -n "$SOURCE" ] && [ -n "${CI_API_V4_URL:-}" ] && [ -n "${CI_PROJECT_ID:-}" ]; then
+        if command -v python3 >/dev/null && command -v base64 >/dev/null; then
+          echo "检测到 MR_CI_SYNC_TOKEN：尝试自动回写源分支 ${SOURCE} ..."
+          TMP_CI="$(mktemp)"
+          TMP_PY="$(mktemp)"
+          git show "origin/${TARGET}:.gitlab-ci.yml" > "$TMP_CI"
+          printf '%s' 'aW1wb3J0IGJhc2U2NCwganNvbiwgb3MsIHVybGxpYi5lcnJvciwgdXJsbGliLnBhcnNlLCB1cmxsaWIucmVxdWVzdAphcGkgPSBvcy5lbnZpcm9uWyJDSV9BUElfVjRfVVJMIl0ucnN0cmlwKCIvIikKcGlkID0gb3MuZW52aXJvblsiQ0lfUFJPSkVDVF9JRCJdCnRva2VuID0gb3MuZW52aXJvblsiTVJfQ0lfU1lOQ19UT0tFTiJdCnNvdXJjZSA9IG9zLmVudmlyb25bIlNPVVJDRSJdCnRhcmdldCA9IG9zLmVudmlyb25bIlRBUkdFVCJdCmVuY19wYXRoID0gdXJsbGliLnBhcnNlLnF1b3RlKCIuZ2l0bGFiLWNpLnltbCIsIHNhZmU9IiIpCmNvbnRlbnQgPSBvcGVuKG9zLmVudmlyb25bIk1SX0NJX1NZTkNfQ09OVEVOVF9GSUxFIl0sICJyYiIpLnJlYWQoKQpiNjQgPSBiYXNlNjQuYjY0ZW5jb2RlKGNvbnRlbnQpLmRlY29kZSgiYXNjaWkiKQoKZGVmIGNhbGwobWV0aG9kLCB1cmwsIGRhdGE9Tm9uZSk6CiAgICBib2R5ID0gTm9uZSBpZiBkYXRhIGlzIE5vbmUgZWxzZSBqc29uLmR1bXBzKGRhdGEpLmVuY29kZSgidXRmLTgiKQogICAgcmVxID0gdXJsbGliLnJlcXVlc3QuUmVxdWVzdCgKICAgICAgICB1cmwsCiAgICAgICAgZGF0YT1ib2R5LAogICAgICAgIG1ldGhvZD1tZXRob2QsCiAgICAgICAgaGVhZGVycz17CiAgICAgICAgICAgICJQUklWQVRFLVRPS0VOIjogdG9rZW4sCiAgICAgICAgICAgICJDb250ZW50LVR5cGUiOiAiYXBwbGljYXRpb24vanNvbiIsCiAgICAgICAgICAgICJBY2NlcHQiOiAiYXBwbGljYXRpb24vanNvbiIsCiAgICAgICAgfSwKICAgICkKICAgIHRyeToKICAgICAgICB3aXRoIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocmVxLCB0aW1lb3V0PTYwKSBhcyByZXNwOgogICAgICAgICAgICByYXcgPSByZXNwLnJlYWQoKS5kZWNvZGUoInV0Zi04IikKICAgICAgICAgICAgcmV0dXJuIHJlc3Auc3RhdHVzLCAoanNvbi5sb2FkcyhyYXcpIGlmIHJhdyBlbHNlIHt9KQogICAgZXhjZXB0IHVybGxpYi5lcnJvci5IVFRQRXJyb3IgYXMgZXhjOgogICAgICAgIHJhdyA9IGV4Yy5yZWFkKCkuZGVjb2RlKCJ1dGYtOCIsIGVycm9ycz0icmVwbGFjZSIpCiAgICAgICAgcmFpc2UgUnVudGltZUVycm9yKCJIVFRQICVzOiAlcyIgJSAoZXhjLmNvZGUsIHJhdykpCgptZXRhX3VybCA9ICIlcy9wcm9qZWN0cy8lcy9yZXBvc2l0b3J5L2ZpbGVzLyVzP3JlZj0lcyIgJSAoCiAgICBhcGksIHBpZCwgZW5jX3BhdGgsIHVybGxpYi5wYXJzZS5xdW90ZShzb3VyY2UsIHNhZmU9IiIpCikKdHJ5OgogICAgXywgbWV0YSA9IGNhbGwoIkdFVCIsIG1ldGFfdXJsKQpleGNlcHQgUnVudGltZUVycm9yIGFzIGV4YzoKICAgIGlmICJIVFRQIDQwNCIgbm90IGluIHN0cihleGMpOgogICAgICAgIHJhaXNlCiAgICBjYWxsKAogICAgICAgICJQT1NUIiwKICAgICAgICAiJXMvcHJvamVjdHMvJXMvcmVwb3NpdG9yeS9maWxlcy8lcyIgJSAoYXBpLCBwaWQsIGVuY19wYXRoKSwKICAgICAgICB7CiAgICAgICAgICAgICJicmFuY2giOiBzb3VyY2UsCiAgICAgICAgICAgICJjb250ZW50IjogYjY0LAogICAgICAgICAgICAiZW5jb2RpbmciOiAiYmFzZTY0IiwKICAgICAgICAgICAgImNvbW1pdF9tZXNzYWdlIjogImNob3JlOiBrZWVwIHRhcmdldCAlcyAuZ2l0bGFiLWNpLnltbCIgJSB0YXJnZXQsCiAgICAgICAgfSwKICAgICkKICAgIHByaW50KCJjcmVhdGVkIikKZWxzZToKICAgIHJlbW90ZV9iNjQgPSBzdHIobWV0YS5nZXQoImNvbnRlbnQiKSBvciAiIikucmVwbGFjZSgiXG4iLCAiIikKICAgIGlmIHJlbW90ZV9iNjQgPT0gYjY0OgogICAgICAgIHByaW50KCJhbHJlYWR5LXN5bmNlZCIpCiAgICBlbHNlOgogICAgICAgIHBheWxvYWQgPSB7CiAgICAgICAgICAgICJicmFuY2giOiBzb3VyY2UsCiAgICAgICAgICAgICJjb250ZW50IjogYjY0LAogICAgICAgICAgICAiZW5jb2RpbmciOiAiYmFzZTY0IiwKICAgICAgICAgICAgImNvbW1pdF9tZXNzYWdlIjogImNob3JlOiBrZWVwIHRhcmdldCAlcyAuZ2l0bGFiLWNpLnltbCIgJSB0YXJnZXQsCiAgICAgICAgfQogICAgICAgIGxhc3QgPSBtZXRhLmdldCgibGFzdF9jb21taXRfaWQiKQogICAgICAgIGlmIGxhc3Q6CiAgICAgICAgICAgIHBheWxvYWRbImxhc3RfY29tbWl0X2lkIl0gPSBsYXN0CiAgICAgICAgY2FsbCgiUFVUIiwgIiVzL3Byb2plY3RzLyVzL3JlcG9zaXRvcnkvZmlsZXMvJXMiICUgKGFwaSwgcGlkLCBlbmNfcGF0aCksIHBheWxvYWQpCiAgICAgICAgcHJpbnQoInVwZGF0ZWQiKQo=' | base64 -d > "$TMP_PY"
+          export TARGET SOURCE CI_API_V4_URL CI_PROJECT_ID MR_CI_SYNC_TOKEN
+          export MR_CI_SYNC_CONTENT_FILE="$TMP_CI"
+          if python3 "$TMP_PY"; then
+            synced=1
+            echo "已自动对齐：源分支 ${SOURCE} 的 .gitlab-ci.yml 已回写为 ${TARGET} 版本。"
+            echo "请等待源分支 / MR 新流水线；本 Job 仍失败一次，避免继续使用旧 CI。"
+          else
+            echo "自动回写失败，回退为手动修复说明。"
+          fi
+          rm -f "$TMP_CI" "$TMP_PY"
+        else
+          echo "Runner 缺少 python3/base64，无法自动回写。"
+        fi
+      else
+        echo "未配置 MR_CI_SYNC_TOKEN（或缺少源分支名），跳过自动回写。"
+      fi
+      echo "手动修复（在源分支执行）："
+      echo "  git fetch origin ${TARGET}"
+      echo "  git checkout origin/${TARGET} -- .gitlab-ci.yml"
+      echo "  git commit -m \"chore: keep target ${TARGET} .gitlab-ci.yml\""
+      echo "  git push"
+      echo "本地合并冲突时一律：git checkout --ours .gitlab-ci.yml  （ours=目标分支）"
+      if [ "$synced" = "1" ]; then
+        fail ".gitlab-ci.yml 曾不一致；已自动回写，请等新流水线"
+      fi
+      fail ".gitlab-ci.yml 与目标分支 ${TARGET} 不一致"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(test|master|main)$/'
+      when: on_success
+    - when: never
+
+mr-validate:
+  # 新 push 自动取消仍在跑的旧流水线，避免排队叠跑
+  interruptible: true
+  stage: test
+  image: node:22-bookworm-slim
+  tags:
+    - build
+  before_script:
+    - corepack enable
+    - yarn config set npmRegistryServer https://registry.npmmirror.com
+  script:
+    - yarn install --immutable
+    - yarn type-check
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(dev|test|master|main|UI)$/'
+
+# CI 文件结构自检：不再检查 BRANCH_ROLE，三分支共用同一份配置
+validate-release-ci:
+  # 新 push 自动取消仍在跑的旧流水线，避免排队叠跑
+  interruptible: true
+  stage: test
+  tags:
+    - build
+  script:
+    - |
+      set -eu
+      FILE=".gitlab-ci.yml"
+      BRANCH="${CI_COMMIT_BRANCH:-${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-unknown}}"
+      fail() { echo "ERROR: $*"; exit 1; }
+      test -s "$FILE" || fail "$FILE 不存在或为空"
+      for job in mr-protect-gitlab-ci mr-validate validate-release-ci test build-dev-management build-test-management build-prod-management deploy-dev-management deploy-test-management deploy-prod-management validate-release push tag-release validate-tag-release-management build-prod-tag-management deploy-prod-tag-management build-candidate-management deploy-candidate-dev-management deploy-candidate-test-management; do
+        grep -Eq "^${job}:" "$FILE" || fail "缺少统一 Job：${job}"
+      done
+      grep -F 'dev-$IMAGE_TAG' "$FILE" >/dev/null || fail "缺少 dev 镜像标签"
+      grep -F 'test-$IMAGE_TAG' "$FILE" >/dev/null || fail "缺少 test 镜像标签"
+      grep -F 'prod-$IMAGE_TAG' "$FILE" >/dev/null || fail "缺少 prod 镜像标签"
+      grep -F -- '--push' "$FILE" >/dev/null || fail "缺少 Registry 推送"
+      grep -F 'Registry push attempt' "$FILE" >/dev/null || fail "缺少 Registry 推送重试"
+      grep -F 'docker login' "$FILE" >/dev/null || fail "缺少 Registry 登录预检"
+      grep -F 'PROD_DEPLOY_HOST' "$FILE" >/dev/null || fail "缺少 PROD_DEPLOY_HOST（避免项目变量 DEPLOY_HOST 覆盖生产地址）"
+      grep -E '^deploy-prod-' "$FILE" >/dev/null || fail "缺少 deploy-prod-* Job"
+      grep -F 'prod-$CI_COMMIT_TAG' "$FILE" >/dev/null || fail "缺少 prod tag 镜像标签"
+      grep -F '$CI_COMMIT_TAG =~ /^v[0-9]' "$FILE" >/dev/null || fail "缺少 tag 发版 workflow 规则"
+      if grep -Eq 'BRANCH_ROLE:[[:space:]]*(dev|test|master|main)' "$FILE"; then
+        fail "检测到旧 BRANCH_ROLE 分支专用标记"
+      fi
+      case "$BRANCH" in
+        dev|test|master|main|UI|unknown) ;;
+        */*) ;;  # candidate/review 等含斜杠分支放行
+        *) fail "未知分支：$BRANCH" ;;
+      esac
+      echo "validate-release-ci OK: unified three-environment configuration"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(dev|test|master|main|UI)$/'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH =~ /^(dev|test|master|main)$/'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: on_success
+    - when: never
+
+variables:
+  # 候选部署下拉 [candidate-deploy-20261029]：手动 Run pipeline 时下拉选择，防手输拼错静默不跑
+  # dev=34 开发 / test=35 测试；39 生产不走候选，统一 v* tag 流水线发版
+  DEPLOY_ENV:
+    value: "none"
+    options: ["none", "dev", "test"]
+    description: "候选部署目标：none=仅校验不部署；dev=34 开发；test=35 测试。配合 feature 等非主干分支使用，选后自动构建部署 cand-<分支>-<SHA>"
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  # 候选镜像引用单点定义 [review3-20261029]：candidate build/deploy 共用，改 tag 格式只改这一行
+  CAND_IMAGE_REF: "$CI_REGISTRY_IMAGE:cand-$CI_COMMIT_REF_SLUG-$IMAGE_TAG"
+  # 候选部署分支排除清单 [review4-20261029]：candidate rules 与守卫共用，新增受限分支改这一行
+  CAND_EXCLUDE_RE: "dev|test|master|main|UI"
+  RELEASE_TAG: ""
+  npm_config_registry: "https://registry.npmmirror.com"
+  npm_config_audit: "false"
+  npm_config_fund: "false"
+
+# 所有构建任务共用 Registry 登录预检和重试
+.docker-registry-login: &docker-registry-login |
+  set -eu
+  : "${CI_REGISTRY:?CI_REGISTRY 未配置}"
+  : "${CI_REGISTRY_IMAGE:?CI_REGISTRY_IMAGE 未配置}"
+  : "${CI_REGISTRY_USER:?CI_REGISTRY_USER 未配置}"
+  : "${CI_JOB_TOKEN:?CI_JOB_TOKEN 未配置}"
+  max_attempts="${REGISTRY_LOGIN_RETRIES:-5}"
+  attempt=1
+  while ! docker info >/dev/null 2>&1; do
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      echo "Docker daemon 预检失败，已重试 ${max_attempts} 次。"
+      exit 1
+    fi
+    echo "Docker daemon 预检失败，${attempt}/${max_attempts}，稍后重试。"
+    sleep $((attempt * 3))
+    attempt=$((attempt + 1))
+  done
+  attempt=1
+  while :; do
+    if printf '%s' "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"; then
+      echo "Registry login preflight OK"
+      break
+    fi
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      echo "Registry 登录预检失败，已重试 ${max_attempts} 次。"
+      exit 1
+    fi
+    echo "Registry 登录失败，${attempt}/${max_attempts}，稍后重试。"
+    sleep $((attempt * 3))
+    attempt=$((attempt + 1))
+  done
+
+.docker-buildx-setup: &docker-buildx-setup |
+  set -eu
+  if docker buildx inspect default >/dev/null 2>&1; then
+    docker buildx use default
+  else
+    docker buildx create --name default --use
+  fi
+
+.build-push-template:
+  stage: build
+  image: docker:24
+  tags:
+    - build
+  variables:
+    DOCKER_BUILDKIT: "1"
+    BUILDKIT_PROGRESS: plain
+  before_script:
+    - *docker-registry-login
+    - *docker-buildx-setup
+  script:
+    - |
+      set +e
+      attempt=1
+      max_attempts="${REGISTRY_PUSH_RETRIES:-3}"
+      rc=1
+      while [ "$attempt" -le "$max_attempts" ]; do
+        echo "Registry push attempt ${attempt}/${max_attempts}: ${IMAGE_REF}"
+        docker buildx build --provenance=false ${BUILD_FLAGS:-} -f "${DOCKERFILE:-Dockerfile}" -t "$IMAGE_REF" --push "${BUILD_CONTEXT:-.}"
+        rc=$?
+        if [ "$rc" -eq 0 ]; then
+          exit 0
+        fi
+        if [ "$attempt" -lt "$max_attempts" ]; then
+          printf '%s' "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY" || true
+          sleep $((attempt * 5))
+        fi
+        attempt=$((attempt + 1))
+      done
+      echo "镜像推送失败，已重试 ${max_attempts} 次。"
+      exit "$rc"
+
+test:
+  # 新 push 自动取消仍在跑的旧流水线，避免排队叠跑
+  interruptible: true
+  stage: test
+  image: node:22-bookworm-slim
+  tags:
+    - build
+  before_script:
+    - corepack enable
+    - yarn config set npmRegistryServer https://registry.npmmirror.com
+  script:
+    - yarn install --immutable
+    - yarn type-check
+  rules:
+    - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_BRANCH =~ /^(dev|test)$/ '
+      when: on_success
+    - when: never
+
+# Web 手动发布：推送 RELEASE_TAG，并创建 Git Tag
+validate-release:
+  # 新 push 自动取消仍在跑的旧流水线，避免排队叠跑
+  interruptible: true
+  stage: build
+  script:
+    - test -n "${RELEASE_TAG:-}" || (echo "RELEASE_TAG 是 Web 手动发布必填项。"; exit 1)
+  rules:
+    # 候选部署（web + DEPLOY_ENV）不发正式版，无需 RELEASE_TAG，跳过本校验 [cand-release-tag-20261030]
+    - if: '$CI_PIPELINE_SOURCE == "web" && $DEPLOY_ENV'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: on_success
+    - when: never
+
+push:
+  extends: .build-push-template
+  variables:
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:$RELEASE_TAG"
+    DOCKERFILE: "Dockerfile"
+    BUILD_CONTEXT: "."
+  needs:
+    - validate-release
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_REGISTRY_IMAGE && $RELEASE_TAG'
+      when: on_success
+    - when: never
+
+tag-release:
+  stage: tag
+  image:
+    name: alpine/git:latest
+    entrypoint: [""]
+  needs:
+    - push
+  script:
+    - |
+      set -eu
+      : "${RELEASE_TAG:?RELEASE_TAG 是必填项}"
+      : "${GIT_PUSH_TOKEN:?GIT_PUSH_TOKEN 未配置}"
+      git config user.name "gitlab-ci"
+      git config user.email "gitlab-ci@${CI_SERVER_HOST}"
+      project_url_without_scheme="${CI_PROJECT_URL#http://}"
+      project_url_without_scheme="${project_url_without_scheme#https://}"
+      git remote set-url origin "${CI_SERVER_PROTOCOL}://oauth2:${GIT_PUSH_TOKEN}@${project_url_without_scheme}.git"
+      if git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | grep -q "refs/tags/${RELEASE_TAG}$"; then
+        echo "Tag ${RELEASE_TAG} 已存在。"
+        exit 1
+      fi
+      git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}" "${CI_COMMIT_SHA}"
+      git push origin "${RELEASE_TAG}"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $RELEASE_TAG'
+      when: on_success
+    - when: never
+
+build-dev-management:
+  extends: .build-push-template
+  variables:
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:dev-$IMAGE_TAG"
+    DOCKERFILE: "Dockerfile"
+    BUILD_CONTEXT: "."
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_REGISTRY_IMAGE'
+      when: on_success
+    - when: never
+
+build-test-management:
+  extends: .build-push-template
+  variables:
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:test-$IMAGE_TAG"
+    DOCKERFILE: "Dockerfile"
+    BUILD_CONTEXT: "."
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_REGISTRY_IMAGE'
+      when: on_success
+    - when: never
+
+build-prod-management:
+  extends: .build-push-template
+  variables:
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:prod-$IMAGE_TAG"
+    DOCKERFILE: "Dockerfile"
+    BUILD_CONTEXT: "."
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - when: never
+
+.deploy-evidence: &deploy-evidence |
+  set +e
+  mkdir -p deploy-evidence
+  started_at="${CI_JOB_STARTED_AT:-1h}"
+  log_file="deploy-evidence/${CI_JOB_NAME}.container.log"
+  inspect_file="deploy-evidence/${CI_JOB_NAME}.inspect.log"
+  if [ "${CI_ENVIRONMENT_NAME:-}" = "production" ] && [ -n "${DEPLOY_HOST:-}" ]; then
+    ssh -o StrictHostKeyChecking=no "root@${DEPLOY_HOST}" \
+      "docker inspect -f 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} ExitCode={{.State.ExitCode}} Error={{.State.Error}}' '${DEPLOY_CONTAINER}'" \
+      >"$inspect_file" 2>&1
+    ssh -o StrictHostKeyChecking=no "root@${DEPLOY_HOST}" \
+      "docker logs --since '${started_at}' '${DEPLOY_CONTAINER}'" \
+      >"$log_file" 2>&1
+  else
+    if docker info >/dev/null 2>&1; then
+      docker_cmd="docker"
+    elif sudo -n docker info >/dev/null 2>&1; then
+      docker_cmd="sudo -n docker"
+    else
+      echo "部署 Runner 未授权单独读取 Docker；容器检查由 deploy-service.sh 完成。" >"$inspect_file"
+      echo "CI 未直接读取容器日志，请查看 deploy-service.sh 输出或主机日志。" >"$log_file"
+      docker_cmd=""
+    fi
+    if [ -n "$docker_cmd" ]; then
+      $docker_cmd inspect -f 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} ExitCode={{.State.ExitCode}} Error={{.State.Error}}' "$DEPLOY_CONTAINER" >"$inspect_file" 2>&1
+      $docker_cmd logs --since "$started_at" "$DEPLOY_CONTAINER" >"$log_file" 2>&1
+    fi
+  fi
+  for evidence in "$log_file" "$inspect_file"; do
+    if [ -f "$evidence" ]; then
+      sed -E -i \
+        -e 's/(password[=:])[^[:space:]]+/\1[REDACTED]/Ig' \
+        -e 's/((token|authorization)[=:])[A-Za-z0-9._~+\/-]+/\1[REDACTED]/Ig' \
+        "$evidence" 2>/dev/null || true
+    fi
+  done
+  cat "$log_file" "$inspect_file" 2>/dev/null | \
+    grep -Ei 'Flyway|migration|SQLException|SQLSyntaxErrorException|Unknown column|ERROR' \
+    >"deploy-evidence/${CI_JOB_NAME}.flyway-error-summary.log" || true
+  echo "--- Flyway/SQL 关键日志摘要（已脱敏） ---"
+  cat "deploy-evidence/${CI_JOB_NAME}.flyway-error-summary.log" 2>/dev/null || true
+
+deploy-dev-management:
+  stage: deploy
+  tags:
+    - deploy-830
+  variables:
+    DEPLOY_CONTAINER: xtreme1-management-1
+    DEPLOY_SERVICE: management
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:dev-$IMAGE_TAG"
+    GIT_STRATEGY: none
+  needs:
+    - build-dev-management
+  resource_group: management-dev
+  script:
+    - sudo -n /data/xtreme1/ops/ci-deploy/deploy-service.sh "$DEPLOY_SERVICE" "$IMAGE_REF"
+  after_script:
+    - *deploy-evidence
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - deploy-evidence/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $AUTO_DEPLOY_DEV == "true"'
+      when: on_success
+    - when: never
+  environment:
+    name: dev
+
+deploy-test-management:
+  stage: deploy
+  tags:
+    - deploy-test
+  variables:
+    DEPLOY_CONTAINER: xtreme1-management-1
+    DEPLOY_SERVICE: management
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:test-$IMAGE_TAG"
+    GIT_STRATEGY: none
+  needs:
+    - build-test-management
+  resource_group: management-test
+  script:
+    - sudo -n /data/xtreme1/ops/ci-deploy/deploy-service.sh "$DEPLOY_SERVICE" "$IMAGE_REF"
+  after_script:
+    - *deploy-evidence
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - deploy-evidence/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test" && $AUTO_DEPLOY_TEST == "true"'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "test"'
+      when: manual
+    - when: never
+  environment:
+    name: test
+
+deploy-prod-management:
+  stage: deploy
+  tags:
+    - deploy-prod
+  variables:
+    DEPLOY_CONTAINER: xtreme1-management-1
+    DEPLOY_SERVICE: management
+    PROD_DEPLOY_HOST: "8.134.177.39"
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:prod-$IMAGE_TAG"
+    GIT_STRATEGY: none
+  needs:
+    - build-prod-management
+  resource_group: management-production
+  script:
+    - |
+      set -eu
+      HOST="${PROD_DEPLOY_HOST:-8.134.177.39}"
+      echo "prod SSH target=${HOST} (ignores project DEPLOY_HOST to avoid override)"
+      ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@${HOST}" "true" \
+        || { echo "ERROR: cannot reach prod host ${HOST}:22"; exit 1; }
+      ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@${HOST}" "/data/xtreme1/ops/ci-deploy/deploy-service.sh ${DEPLOY_SERVICE} '${IMAGE_REF}'"
+  after_script:
+    - *deploy-evidence
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - deploy-evidence/
+  rules:
+    # 2026-10-28 退役：此分支不部署生产，发版统一走 tag 流水线 deploy-prod-tag-*
+    - when: never
+  environment:
+    name: production
+
+# =============================================================================
+# 个人预览环境（Review Apps）[review-apps-20260920]
+# 分支约定：<拼音>/<描述>（如 yangkang/api-fix）自动部署到
+# http://<拼音>.sc.dev.whdei.com:8190/（34 上 deploy-review.sh 承接，7 天不活跃自动回收）
+# 特例 ui/preview：UI 平行环境部署到 35（http://172.16.42.35:8390/，共用 test 主栈），由 35 专属 runner（tag deploy-35）执行
+# 本段必须在 dev / test / master|main 三分支保持一致。
+# =============================================================================
+
+build-review-management:
+  extends: .build-push-template
+  variables:
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:review-$IMAGE_TAG"
+    DOCKERFILE: "Dockerfile"
+    BUILD_CONTEXT: "."
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /^(feature|release|hotfix)\//'
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /^[a-z0-9-]{1,20}\// && $CI_REGISTRY_IMAGE'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "UI" && $CI_REGISTRY_IMAGE'
+      when: on_success
+    - when: never
+
+deploy-review-management:
+  stage: deploy
+  tags:
+    - deploy-830
+  variables:
+    GIT_STRATEGY: none
+  needs:
+    - build-review-management
+  resource_group: review-deploy
+  script:
+    - |
+      set -eu
+      # 取分支第一段作为个人环境名；Registry 登录/拉取/重建/健康检查由 deploy-review.sh 完成
+      sudo -n /data/xtreme1/ops/ci-deploy/deploy-review.sh "${CI_COMMIT_BRANCH%%/*}" management "$CI_REGISTRY_IMAGE:review-$IMAGE_TAG"
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^(feature|release|hotfix)\//'
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /^[a-z0-9-]{1,20}\// && $CI_COMMIT_BRANCH != "ui/preview"'
+      when: on_success
+    - when: never
+  environment:
+    name: review/$CI_COMMIT_REF_SLUG
+
+# UI 平行环境（UI 分支为主，ui/preview 兼容保留）：35 本机部署（deploy-review-ui.sh 更新镜像→重建→8390 健康检查）
+deploy-review-management-ui:
+  stage: deploy
+  tags:
+    - deploy-35
+  variables:
+    GIT_STRATEGY: none
+  needs:
+    - build-review-management
+  resource_group: review-deploy
+  script:
+    - |
+      set -eu
+      sudo -n /data/xtreme1/ops/ci-deploy/deploy-review-ui.sh ui management "$CI_REGISTRY_IMAGE:review-$IMAGE_TAG"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "UI" || $CI_COMMIT_BRANCH == "ui/preview"'
+      when: on_success
+    - when: never
+  environment:
+    name: review/$CI_COMMIT_REF_SLUG
+
+
+# =============================================================================
+# 生产版本号 tag 发版 [tag-release-20261009]
+# 操作：默认分支合并后 → 仓库 Tags → New tag → v1.0.0（严格三段式）→ 流水线自动
+#       校验并构建 prod-v1.0.0 镜像 → 人工点 deploy-prod-tag ▶ 部署 39。
+#       tag 必须在默认分支历史上（防绕过 MR 直发生产）。prod-v* 镜像是回滚锚点禁清理。
+# 本段必须在 dev / test / master|main 分支保持完全一致。
+# =============================================================================
+
+validate-tag-release-management:
+  # 新 push 自动取消仍在跑的旧流水线，避免排队叠跑
+  interruptible: true
+  stage: test
+  tags:
+    - build
+  script:
+    - |
+      set -eu
+      fail() { echo "ERROR: $*"; exit 1; }
+      echo "TAG=$CI_COMMIT_TAG SHA=$CI_COMMIT_SHA"
+      git fetch --depth=200 origin "$CI_DEFAULT_BRANCH"
+      git merge-base --is-ancestor "$CI_COMMIT_SHA" "origin/$CI_DEFAULT_BRANCH" \
+        || fail "tag 不在 $CI_DEFAULT_BRANCH 历史上，禁止绕过合并直发生产"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+    - when: never
+
+build-prod-tag-management:
+  extends: .build-push-template
+  variables:
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:prod-$CI_COMMIT_TAG"
+    DOCKERFILE: "Dockerfile"
+    BUILD_CONTEXT: "."
+  needs:
+    - validate-tag-release-management
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+    - when: never
+
+deploy-prod-tag-management:
+  stage: deploy
+  tags:
+    - deploy-prod
+  variables:
+    DEPLOY_CONTAINER: xtreme1-management-1
+    DEPLOY_SERVICE: management
+    PROD_DEPLOY_HOST: "8.134.177.39"
+    IMAGE_REF: "$CI_REGISTRY_IMAGE:prod-$CI_COMMIT_TAG"
+    GIT_STRATEGY: none
+  needs:
+    - build-prod-tag-management
+  resource_group: management-production
+  script:
+    - |
+      set -eu
+      HOST="${PROD_DEPLOY_HOST:-8.134.177.39}"
+      echo "prod SSH target=${HOST} (ignores project DEPLOY_HOST to avoid override)"
+      ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@${HOST}" "true" \
+        || { echo "ERROR: cannot reach prod host ${HOST}:22"; exit 1; }
+      ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@${HOST}" "/data/xtreme1/ops/ci-deploy/deploy-service.sh ${DEPLOY_SERVICE} '${IMAGE_REF}'"
+  after_script:
+    - *deploy-evidence
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - deploy-evidence/
+  rules:
+    - if: '($CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) && $AUTO_DEPLOY_PROD == "true"'
+      when: on_success
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: manual
+    - when: never
+  environment:
+    name: production
+
+# =============================================================================
+# 指定分支部署到 dev/test（候选验证）[candidate-deploy-20261009]
+# 操作：Run pipeline → 选 feature 等任意分支 → 变量 DEPLOY_ENV=dev|test → 自动构建
+#       cand-<分支>-<SHA> 并部署 34/35（不经合并）。共享环境会被临时顶掉，用完必须人工恢复：
+#       在 dev 分支 Run pipeline 跑一轮 dev 部署（覆盖回正式镜像）/ 在 test 分支点 deploy ▶。
+# 看台镜像 tag 显示 cand- 前缀 = 环境正被临时占用；验收模式期间禁用候选部署占 35。
+# 本段必须在 dev / test / master|main 分支保持完全一致。
+# =============================================================================
+
+build-candidate-management:
+  extends: .build-push-template
+  variables:
+    IMAGE_REF: "$CAND_IMAGE_REF"
+    DOCKERFILE: "Dockerfile"
+    BUILD_CONTEXT: "."
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $DEPLOY_ENV =~ /^(dev|test)$/ && $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH !~ /^($CAND_EXCLUDE_RE)$/'
+      when: on_success
+    - when: never
+
+deploy-candidate-dev-management:
+  stage: deploy
+  tags:
+    - deploy-830
+  variables:
+    DEPLOY_CONTAINER: xtreme1-management-1
+    DEPLOY_SERVICE: management
+    IMAGE_REF: "$CAND_IMAGE_REF"
+    GIT_STRATEGY: none
+  needs:
+    - build-candidate-management
+  resource_group: management-dev
+  script:
+    - sudo -n /data/xtreme1/ops/ci-deploy/deploy-service.sh "$DEPLOY_SERVICE" "$IMAGE_REF"
+  after_script:
+    - *deploy-evidence
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - deploy-evidence/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $DEPLOY_ENV == "dev" && $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH !~ /^($CAND_EXCLUDE_RE)$/'
+      when: on_success
+    - when: never
+  environment:
+    name: dev
+
+deploy-candidate-test-management:
+  stage: deploy
+  tags:
+    - deploy-test
+  variables:
+    DEPLOY_CONTAINER: xtreme1-management-1
+    DEPLOY_SERVICE: management
+    IMAGE_REF: "$CAND_IMAGE_REF"
+    GIT_STRATEGY: none
+  needs:
+    - build-candidate-management
+  resource_group: management-test
+  script:
+    - sudo -n /data/xtreme1/ops/ci-deploy/deploy-service.sh "$DEPLOY_SERVICE" "$IMAGE_REF"
+  after_script:
+    - *deploy-evidence
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - deploy-evidence/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $DEPLOY_ENV == "test" && $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH !~ /^($CAND_EXCLUDE_RE)$/'
+      when: on_success
+    - when: never
+  environment:
+    name: test
+
+# DEPLOY_ENV 守卫 [candidate-deploy-20261029] [review3-20261029] [review4-20261029]：
+# options 下拉仅约束 Run pipeline UI。三类误用 candidate rules 都会静默拒绝（无部署无报错，
+# 易被误判为部署成功），本 job 让它们显式失败，并一次性报出全部命中的错误：
+# ① 值非法；② 值合法但选在主干/环境分支；③ 值合法但触发源非 web（API/Schedule 传参）。
+validate-deploy-env:
+  # 新 push 自动取消仍在跑的旧流水线，避免排队叠跑；放 .pre 保证误用最先报错（fail-fast）
+  interruptible: true
+  stage: .pre
+  tags: [build]
+  rules:
+    # ① 值非法（合法：none/dev/test）
+    - if: '$DEPLOY_ENV && $DEPLOY_ENV !~ /^(none|dev|test)$/'
+    # ② 值合法但分支受限（排除清单与 candidate rules 共用 CAND_EXCLUDE_RE）
+    - if: '$DEPLOY_ENV && $DEPLOY_ENV != "none" && $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH =~ /^($CAND_EXCLUDE_RE)$/'
+    # ③ 值合法、分支合法，但触发源非 web（API/Schedule 传参静默 no-op 的闭环）
+    - if: '$DEPLOY_ENV && $DEPLOY_ENV != "none" && $CI_PIPELINE_SOURCE != "web"'
+  script:
+    - |
+      err=""
+      if [ -n "$CI_COMMIT_BRANCH" ] && printf '%s' "$CI_COMMIT_BRANCH" | grep -qE "^($CAND_EXCLUDE_RE)$"; then
+        echo "ERROR: 分支 $CI_COMMIT_BRANCH 不支持候选部署（仅限 feature 等非主干分支）"; err=1
+      fi
+      if ! printf '%s' "$DEPLOY_ENV" | grep -qE '^(none|dev|test)$'; then
+        echo "ERROR: DEPLOY_ENV=$DEPLOY_ENV 非法（合法：none/dev/test），请走 Run pipeline 页面下拉选择"; err=1
+      fi
+      if [ "$CI_PIPELINE_SOURCE" != "web" ]; then
+        echo "ERROR: 候选部署仅支持 Run pipeline（web）触发，当前触发源 $CI_PIPELINE_SOURCE"; err=1
+      fi
+      exit 1
+

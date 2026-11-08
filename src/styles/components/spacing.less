@@ -1,0 +1,32 @@
+@spacing-values: 0, 4, 6, 8, 10, 12, 16, 20, 24, 32;
+
+// 间距类的数值后缀与实际像素值保持一致，便于直接读取布局尺寸。
+each(@spacing-values, {
+  .m-@{value} { margin: (@value * 1px); }
+  .m-t-@{value} { margin-top: (@value * 1px); }
+  .m-r-@{value} { margin-right: (@value * 1px); }
+  .m-b-@{value} { margin-bottom: (@value * 1px); }
+  .m-l-@{value} { margin-left: (@value * 1px); }
+  .m-x-@{value} {
+    margin-right: (@value * 1px);
+    margin-left: (@value * 1px);
+  }
+  .m-y-@{value} {
+    margin-top: (@value * 1px);
+    margin-bottom: (@value * 1px);
+  }
+  .pd-@{value} { padding: (@value * 1px); }
+  .pd-t-@{value} { padding-top: (@value * 1px); }
+  .pd-r-@{value} { padding-right: (@value * 1px); }
+  .pd-b-@{value} { padding-bottom: (@value * 1px); }
+  .pd-l-@{value} { padding-left: (@value * 1px); }
+  .pd-x-@{value} {
+    padding-right: (@value * 1px);
+    padding-left: (@value * 1px);
+  }
+  .pd-y-@{value} {
+    padding-top: (@value * 1px);
+    padding-bottom: (@value * 1px);
+  }
+  .gap-@{value} { gap: (@value * 1px); }
+});

@@ -1,0 +1,10 @@
+# 仓库文本统一使用 LF，避免 Windows 的 core.autocrlf 覆盖 EditorConfig。
+* text=auto eol=lf
+
+# Windows 命令脚本保留系统原生 CRLF 行尾。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Keep each long-lived branch's CI when merging between environments (dev/test/main|master).
+# Local clones need once: git config merge.ours.driver true
+.gitlab-ci.yml merge=ours

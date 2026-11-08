@@ -1,0 +1,62 @@
+:root {
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Microsoft YaHei",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  /* scroll-behavior: smooth; */
+  /* scrollbar-width: thin; */
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+  background-color: var(--dm-bg-layout);
+}
+
+/* iframe 文档不能可靠透出父窗口底色，使用 pc-tool 属性窗口同款底色避免黑色块。 */
+html.dynamic-form-embedded-page,
+html.dynamic-form-embedded-page body,
+html.dynamic-form-embedded-page #app,
+html.dynamic-form-embedded-page .dynamic-form-embedded,
+html.dynamic-form-embedded-page .dynamic-form-panel {
+  background: #111827 !important;
+  background-color: #111827 !important;
+}
+
+body {
+  min-width: 320px;
+}
+
+.pointer {
+  cursor: pointer;
+}

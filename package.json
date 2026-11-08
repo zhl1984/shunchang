@@ -1,0 +1,68 @@
+{
+  "name": "shuqing-annotation-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "yarn@4.16.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "yarn type-check && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "type-check": "vue-tsc --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@uppy/core": "5.2.0",
+    "@uppy/golden-retriever": "5.2.1",
+    "@uppy/tus": "5.1.1",
+    "ant-design-vue": "4.2.6",
+    "axios": "1.8.4",
+    "dayjs": "1.11.23",
+    "echarts": "5.6.0",
+    "lodash-es": "4.17.21",
+    "pinia": "2.3.1",
+    "vue": "3.5.13",
+    "vue-i18n": "11.1.2",
+    "vue-router": "4.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.22.0",
+    "@tsconfig/node22": "22.0.0",
+    "@types/lodash-es": "4.17.12",
+    "@types/node": "22.13.10",
+    "@vitejs/plugin-legacy": "6.0.0",
+    "@vitejs/plugin-vue": "5.2.3",
+    "@vue/tsconfig": "0.7.0",
+    "eslint": "9.22.0",
+    "eslint-config-prettier": "10.1.1",
+    "eslint-plugin-vue": "10.0.0",
+    "globals": "16.0.0",
+    "husky": "9.1.7",
+    "jsdom": "30.0.1",
+    "less": "4.2.2",
+    "lint-staged": "17.3.0",
+    "prettier": "3.5.3",
+    "terser": "5.39.0",
+    "typescript": "5.8.2",
+    "typescript-eslint": "8.26.0",
+    "unplugin-vue-components": "28.4.1",
+    "vite": "6.2.2",
+    "vitest": "4.1.10",
+    "vue-eslint-parser": "10.1.1",
+    "vue-tsc": "2.2.8"
+  },
+  "overrides": {
+    "keyv": "4.5.4"
+  },
+  "resolutions": {
+    "keyv": "4.5.4"
+  },
+  "lint-staged": {
+    "*.{js,mjs,cjs,ts,vue,json,less,css,md}": "prettier --write"
+  }
+}

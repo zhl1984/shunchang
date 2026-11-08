@@ -1,0 +1,35 @@
+/* Indexed card palettes for common summary and information cards. */
+.dm-card-1,
+.dm-card-2,
+.dm-card-3,
+.dm-card-4,
+.dm-card-5 {
+  border-style: solid;
+  border-width: 1px;
+}
+
+.dm-card-1 {
+  background: var(--dm-card-bg-1);
+  border-color: var(--dm-card-border-1);
+  color: var(--dm-card-text-1);
+}
+.dm-card-2 {
+  background: var(--dm-card-bg-2);
+  border-color: var(--dm-card-border-2);
+  color: var(--dm-card-text-2);
+}
+.dm-card-3 {
+  background: var(--dm-card-bg-3);
+  border-color: var(--dm-card-border-3);
+  color: var(--dm-card-text-3);
+}
+.dm-card-4 {
+  background: var(--dm-card-bg-4);
+  border-color: var(--dm-card-border-4);
+  color: var(--dm-card-text-4);
+}
+.dm-card-5 {
+  background: var(--dm-card-bg-5);
+  border-color: var(--dm-card-border-5);
+  color: var(--dm-card-text-5);
+}

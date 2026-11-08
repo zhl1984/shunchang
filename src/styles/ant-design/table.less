@@ -1,0 +1,29 @@
+// 表格操作列显式使用该类，避免依赖不会输出到 DOM 的 column key。
+.table-actions-cell {
+  white-space: nowrap;
+}
+
+// 行级图标按钮使用普通按钮样式，并保持统一的点击目标间距。
+.table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  color: var(--dm-text2);
+}
+
+// 仅在表体包含空状态占位行时铺满表格高度，避免单条数据被拉伸。
+.ant-table-body:has(.ant-table-placeholder) > table {
+  height: 100%;
+}
+
+// 排序箭头顶置紧跟列标题：antd 默认把 .ant-table-column-title 设为
+// flex:1 且 .ant-table-column-sorters 两端对齐，导致图标被推到单元格最右。
+// 改为左对齐并让标题仅占自身内容宽度，图标即可紧贴标题（参考列表页视觉）。
+.ant-table-column-sorters {
+  justify-content: flex-start;
+}
+
+.ant-table-column-title {
+  flex: none;
+}

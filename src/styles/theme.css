@@ -1,0 +1,249 @@
+/* 浅色主题是默认回退，避免应用挂载前出现无变量状态。 */
+:root,
+html.theme-light {
+  color-scheme: light;
+
+  /* 文字色：从正文到弱提示依次降低视觉权重。 */
+  --dm-text: rgb(0 0 0 / 88%); /* 标题和正文 */
+  --dm-text-2: rgb(0 0 0 / 65%); /* 次要正文 */
+  --dm-text-3: rgb(0 0 0 / 45%); /* 辅助说明 */
+  --dm-text-4: rgb(0 0 0 / 25%); /* 占位符和装饰文字 */
+  --dm-text-disabled: rgb(0 0 0 / 25%); /* 禁用文字 */
+  --dm-text-bg: #fff; /* 高亮背景文字 */
+  --dm-soft-card-text: #1f1f1f; /* 浅色卡片背景上的主要文字 */
+
+  /* 背景色：页面、内容容器、浮层、强调提示和遮罩。 */
+  --dm-bg-layout: #f5f7fb;
+  --dm-bg-container: #fff;
+  --dm-bg-elevated: #fff;
+  --dm-bg-disabled: rgb(0 0 0 / 4%); /* 禁用控件背景 */
+  --dm-bg-spotlight: rgb(0 0 0 / 85%);
+  --dm-bg-mask: rgb(0 0 0 / 45%);
+
+  /* 边框色：输入控件边界和内容分隔线。 */
+  --dm-border: #d9d9d9;
+  --dm-border-2: #f0f0f0;
+  --dm-border-disabled: #d9d9d9; /* 禁用控件边框 */
+
+  /* 填充色：从强选中到轻微悬浮依次降低视觉权重。 */
+  --dm-fill: rgb(0 0 0 / 15%);
+  --dm-fill-2: rgb(0 0 0 / 6%);
+  --dm-fill-3: rgb(0 0 0 / 4%);
+  --dm-fill-4: rgb(0 0 0 / 2%);
+
+  /* 控件状态：列表项悬浮、选中和焦点轮廓。 */
+  --dm-item-hover-bg: rgb(0 0 0 / 4%);
+  --dm-item-active-bg: #e6f4ff;
+  --dm-outline: rgb(5 145 255 / 10%);
+}
+/* 深色值与 Ant Design darkAlgorithm 的默认视觉层级保持一致。 */
+html.theme-dark {
+  color-scheme: dark;
+
+  /* 文字色：从正文到弱提示依次降低视觉权重。 */
+  --dm-text: rgb(255 255 255 / 85%); /* 标题和正文 */
+  --dm-text-2: rgb(255 255 255 / 65%); /* 次要正文 */
+  --dm-text-3: rgb(255 255 255 / 45%); /* 辅助说明 */
+  --dm-text-4: rgb(255 255 255 / 25%); /* 占位符和装饰文字 */
+  --dm-text-disabled: rgb(255 255 255 / 25%); /* 禁用文字 */
+  --dm-text-bg: #fff; /* 高亮背景文字 */
+  --dm-soft-card-text: #1f1f1f; /* 浅色统计卡片上的对比文字 */
+
+  /* 背景色：页面、内容容器、浮层、强调提示和遮罩。 */
+  --dm-bg-layout: #000;
+  --dm-bg-container: #141414;
+  --dm-bg-elevated: #1f1f1f;
+  --dm-bg-disabled: rgb(255 255 255 / 8%); /* 禁用控件背景 */
+  --dm-bg-spotlight: #424242;
+  --dm-bg-mask: rgb(0 0 0 / 45%);
+
+  /* 边框色：输入控件边界和内容分隔线。 */
+  --dm-border: #424242;
+  --dm-border-2: #303030;
+  --dm-border-disabled: #424242; /* 禁用控件边框 */
+
+  /* 填充色：从强选中到轻微悬浮依次降低视觉权重。 */
+  --dm-fill: rgb(255 255 255 / 18%);
+  --dm-fill-2: rgb(255 255 255 / 12%);
+  --dm-fill-3: rgb(255 255 255 / 8%);
+  --dm-fill-4: rgb(255 255 255 / 4%);
+
+  /* 控件状态：列表项悬浮、选中和焦点轮廓。 */
+  --dm-item-hover-bg: rgb(255 255 255 / 8%);
+  --dm-item-active-bg: #111a2c;
+  --dm-outline: rgb(0 60 180 / 15%);
+}
+
+/* 品牌色和状态色系 */
+:root,
+html.theme-light {
+  /* 品牌主色：主要按钮、选中项和关键操作。 */
+  --dm-primary: #1677ff;
+  --dm-primary-hover: #4096ff;
+  --dm-primary-active: #0958d9;
+  --dm-primary-bg: #e6f4ff; /* 弱选中或提示背景 */
+  --dm-primary-bg-hover: #bae0ff; /* 弱背景悬浮态 */
+  --dm-primary-border: #91caff; /* 主色系弱边框 */
+
+  /* 链接色：正文链接及其交互状态。 */
+  --dm-link: #1677ff;
+  --dm-link-hover: #69b1ff;
+  --dm-link-active: #0958d9;
+
+  /* 成功色：成功提示、已完成状态和正向结果。 */
+  --dm-success: #52c41a;
+  --dm-success-bg: #f6ffed;
+  --dm-success-border: #b7eb8f;
+
+  /* 警告色：风险提示、待处理状态和需要关注的信息。 */
+  --dm-warning: #faad14;
+  --dm-warning-bg: #fffbe6;
+  --dm-warning-border: #ffe58f;
+
+  /* 错误色：校验错误、失败状态和危险操作。 */
+  --dm-error: #ff4d4f;
+  --dm-error-bg: #fff2f0;
+  --dm-error-border: #ffccc7;
+
+  /* 信息色：普通通知、说明提示和信息状态。 */
+  --dm-info: #1677ff;
+  --dm-info-bg: #e6f4ff;
+  --dm-info-border: #91caff;
+
+  /* 弱化色：低强调度的基础状态，适合普通标签和非重点信息。 */
+  --dm-muted: #8c8c8c;
+  --dm-muted-bg: #fafafa;
+  --dm-muted-border: #d9d9d9;
+}
+html.theme-dark {
+  /* 品牌主色：主要按钮、选中项和关键操作。 */
+  --dm-primary: #1668dc;
+  --dm-primary-hover: #3c89e8;
+  --dm-primary-active: #1554ad;
+  --dm-primary-bg: #111a2c; /* 弱选中或提示背景 */
+  --dm-primary-bg-hover: #112545; /* 弱背景悬浮态 */
+  --dm-primary-border: #15325b; /* 主色系弱边框 */
+
+  /* 链接色：正文链接及其交互状态。 */
+  --dm-link: #1668dc;
+  --dm-link-hover: #3c89e8;
+  --dm-link-active: #1554ad;
+
+  /* 成功色：成功提示、已完成状态和正向结果。 */
+  --dm-success: #49aa19;
+  --dm-success-bg: #162312;
+  --dm-success-border: #274916;
+
+  /* 警告色：风险提示、待处理状态和需要关注的信息。 */
+  --dm-warning: #d89614;
+  --dm-warning-bg: #2b2111;
+  --dm-warning-border: #594214;
+
+  /* 错误色：校验错误、失败状态和危险操作。 */
+  --dm-error: #dc4446;
+  --dm-error-bg: #2c1618;
+  --dm-error-border: #5b2526;
+
+  /* 信息色：普通通知、说明提示和信息状态。 */
+  --dm-info: #1668dc;
+  --dm-info-bg: #111a2c;
+  --dm-info-border: #15325b;
+
+  /* 弱化色：深色主题下使用柔和灰阶，避免普通状态过度突出。 */
+  --dm-muted: #8c8c8c;
+  --dm-muted-bg: #262626;
+  --dm-muted-border: #434343;
+}
+
+/* Common indexed card/tag palettes. Dark theme values are intentionally deeper. */
+:root,
+html.theme-light {
+  --dm-card-bg-1: #f3f6fa;
+  --dm-card-border-1: #e5eaf0;
+  --dm-card-text-1: #102a43;
+
+  --dm-card-bg-2: #f1eaff;
+  --dm-card-border-2: #d9c2ff;
+  --dm-card-text-2: #722ed1;
+
+  --dm-card-bg-3: #eaf3ff;
+  --dm-card-border-3: #b7d7ff;
+  --dm-card-text-3: #0958d9;
+
+  --dm-card-bg-4: #e8faf2;
+  --dm-card-border-4: #b7ebd0;
+  --dm-card-text-4: #078553;
+
+  --dm-card-bg-5: #fff0f0;
+  --dm-card-border-5: #ffccc7;
+  --dm-card-text-5: #cf1322;
+
+  --dm-tag-bg-1: #f1eaff;
+  --dm-tag-border-1: #d9c2ff;
+  --dm-tag-text-1: #722ed1;
+
+  --dm-tag-bg-2: #eaf3ff;
+  --dm-tag-border-2: #b7d7ff;
+  --dm-tag-text-2: #0958d9;
+
+  --dm-tag-bg-3: #e8faf2;
+  --dm-tag-border-3: #b7ebd0;
+  --dm-tag-text-3: #078553;
+
+  --dm-tag-bg-4: #fff0f0;
+  --dm-tag-border-4: #ffccc7;
+  --dm-tag-text-4: #cf1322;
+
+  --dm-tag-bg-5: #fff7e6;
+  --dm-tag-border-5: #ffd591;
+  --dm-tag-text-5: #d46b08;
+
+  --dm-tag-bg-6: #f5f5f5;
+  --dm-tag-border-6: #d9d9d9;
+  --dm-tag-text-6: #595959;
+}
+html.theme-dark {
+  --dm-card-bg-1: #242a33;
+  --dm-card-border-1: #394452;
+  --dm-card-text-1: #e6edf5;
+
+  --dm-card-bg-2: #2c2140;
+  --dm-card-border-2: #513a75;
+  --dm-card-text-2: #d3adff;
+
+  --dm-card-bg-3: #1d304b;
+  --dm-card-border-3: #315b8d;
+  --dm-card-text-3: #91caff;
+
+  --dm-card-bg-4: #193a2d;
+  --dm-card-border-4: #286044;
+  --dm-card-text-4: #95deba;
+
+  --dm-card-bg-5: #421f24;
+  --dm-card-border-5: #71343b;
+  --dm-card-text-5: #ffaaa5;
+
+  --dm-tag-bg-1: #2c2140;
+  --dm-tag-border-1: #513a75;
+  --dm-tag-text-1: #d3adff;
+
+  --dm-tag-bg-2: #1d304b;
+  --dm-tag-border-2: #315b8d;
+  --dm-tag-text-2: #91caff;
+
+  --dm-tag-bg-3: #193a2d;
+  --dm-tag-border-3: #286044;
+  --dm-tag-text-3: #95deba;
+
+  --dm-tag-bg-4: #421f24;
+  --dm-tag-border-4: #71343b;
+  --dm-tag-text-4: #ffaaa5;
+
+  --dm-tag-bg-5: #3d2b13;
+  --dm-tag-border-5: #6b4b1c;
+  --dm-tag-text-5: #ffd591;
+
+  --dm-tag-bg-6: #2b2b2b;
+  --dm-tag-border-6: #4a4a4a;
+  --dm-tag-text-6: #bfbfbf;
+}
